@@ -12,6 +12,10 @@ const router = createRouter({
       path: '/canvas',
       name: 'canvas',
       component: () => import('../views/canvas.vue')
+    },{
+      path: '/face-recognition',
+      name: 'faceRecognition',
+      component: () => import('../views/faceRecognition.vue')
     }
   ]
 })
