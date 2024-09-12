@@ -44,16 +44,27 @@
             playsinline
             :webkit-playsinline="true"
           ></video>
+          <img :src="src" alt="" />
         </div>
 
         <canvas ref="canvas" style="display: none"></canvas>
       </div>
     </div>
+    <div v-if="error" class="mask"></div>
+    <div v-if="error" class="error">
+      <img @click="closeMask" src="@/assets/images/6.png" alt="" />
+      <div class="a">
+        <div class="a1">认证失败</div>
+        <div class="a2">人脸验证错误</div>
+      </div>
+      <div class="b" @click="closeMask">好的</div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onBeforeUnmount } from 'vue'
+const error = ref(false)
 const status = ref(1) // 默认是没有验证状态
 const vedioOpen = ref(true)
 const trackerTask = ref() //tracking实例
@@ -72,6 +83,7 @@ const state = reactive({
   action: '张嘴',
   isCheck: true
 })
+const count = ref(0)
 
 const jiance = ref()
 //是否张嘴，精度取决于其中的检测方法
@@ -86,12 +98,22 @@ const isOpenMouth = (mouth, base64Img) => {
     state.mouth_Y = _y
   }
   if (Math.abs(state.mouth_Y - _y) > 10) {
+    error.value = false
     clearTimeout(jiance.value)
     console.log('检测成功，正在拍照', 'info', base64Img)
     tip.value = '正在拍照，请勿乱动'
     src.value = base64Img
+
     //上传照片
     // uploadimg(base64Img);
+  } else {
+    // 这里判断 是否失败
+    // 由于 每次是400ms  所以5s 之后如果没成功就是失败
+    ++count.value
+    if (count.value > 12.5) {
+      error.value = true
+      clearTimeout(jiance.value)
+    }
   }
   state.mouth_Y = _y
 }
@@ -102,13 +124,13 @@ const face_test = async (base64Img) => {
     .withFaceLandmarks()
   if (detections1) {
     const landmarks = detections1.landmarks
-    const jawOutline = landmarks.getJawOutline()
-    const nose = landmarks.getNose()
+    // const jawOutline = landmarks.getJawOutline()
+    // const nose = landmarks.getNose()
     const mouth = landmarks.getMouth()
-    const leftEye = landmarks.getLeftEye()
-    const rightEye = landmarks.getRightEye()
-    const leftEyeBbrow = landmarks.getLeftEyeBrow()
-    const rightEyeBrow = landmarks.getRightEyeBrow()
+    // const leftEye = landmarks.getLeftEye()
+    // const rightEye = landmarks.getRightEye()
+    // const leftEyeBbrow = landmarks.getLeftEyeBrow()
+    // const rightEyeBrow = landmarks.getRightEyeBrow()
     //将特征值给这个方法检测是否张嘴了
     isOpenMouth(mouth, base64Img)
     const resizedDetections = faceapi.resizeResults(detections1, {
@@ -123,7 +145,7 @@ const initHuoti = async (rect) => {
   await faceapi.loadFaceLandmarkModel('/models')
   state.options = new faceapi.TinyFaceDetectorOptions({
     inputSize: 320,
-    scoreThreshold: 0.4
+    scoreThreshold: 0.6
   })
 
   //设定定时器，重复获取当前摄像头的图片
@@ -185,6 +207,26 @@ const beginVerify = () => {
   status.value = 2
   init()
 }
+const closeMask = () => {
+  // 关闭 弹窗
+  error.value = false
+  clearTimeout(jiance.value)
+  setTimeout(() => {
+    init()
+  }, 100)
+
+  // 关闭之后 需要重新定时判断
+}
+//在使用页面关闭摄像头的方法
+const stopMediaStreamTrack = function () {
+  if (typeof window.stream === 'object') {
+    window.stream.getTracks().forEach((track) => track.stop())
+  }
+  clearTimeout(jiance.value)
+}
+onBeforeUnmount(() => {
+  stopMediaStreamTrack()
+})
 </script>
 
 <style scoped>
@@ -219,12 +261,17 @@ const beginVerify = () => {
   z-index: 1;
 }
 .content2 video {
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
+  width: calc(100% - 14px);
+  height: calc(100% - 14px);
   position: absolute;
-  top:0;
+  top: 0;
   left: 0;
+  bottom: 0;
+  right: 0;
   z-index: 2;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: auto;
 }
 .content {
   background: #ffffff;
@@ -327,5 +374,67 @@ const beginVerify = () => {
   transform: translateY(-50%);
   width: 24px;
   height: 24px;
+}
+.mask {
+  background: rgba(0, 0, 0, 0.5);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 99;
+  width: 100%;
+  height: 100vh;
+}
+.error {
+  margin: 100px auto 0 auto;
+  width: 295px;
+  height: 207px;
+  background: #ffffff;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 25px;
+  position: absolute;
+  top: 200px;
+  z-index: 99;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.error img {
+  width: 73px;
+  height: 73px;
+  position: relative;
+  top: -35px;
+}
+.error .a {
+  position: relative;
+  top: -20px;
+}
+.error .a .a1 {
+  font-weight: 500;
+  font-size: 18px;
+  color: #202020;
+  line-height: 25px;
+}
+.error .a .a2 {
+  font-weight: 400;
+  font-size: 12px;
+  color: #202020;
+  line-height: 17px;
+}
+.error .b {
+  position: relative;
+  top: -20px;
+  width: 100%;
+  height: 42px;
+  background: #fed631;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 500;
+  font-size: 16px;
+  color: #333333;
 }
 </style>
