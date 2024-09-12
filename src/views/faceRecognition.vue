@@ -75,6 +75,8 @@ const src = ref()
 const video = ref() //播放器实例
 const getUserMedia = ref('')
 const canvas = ref()
+const isClick = ref(false)
+let tracker = null
 const state = reactive({
   options: '',
   nose_x_anv: '',
@@ -86,6 +88,29 @@ const state = reactive({
 const count = ref(0)
 
 const jiance = ref()
+
+const trackFunc = (event) => {
+  // 如果是结束状态就不处理了
+  if (error.value && !isClick.value) return
+  if (event.data.length == 0) {
+    if (!faceflag.value) {
+      tip.value = '未检测到人脸'
+    }
+  } else if (event.data.length > 0) {
+    event.data.forEach(async (rect, index) => {
+      if (index != 0) {
+        return
+      }
+      // 防抖
+      if (!faceflag.value) {
+        faceflag.value = true
+        tip.value = '请张张嘴'
+        //进入人脸动作检测方法
+        initHuoti(rect)
+      }
+    })
+  }
+}
 //是否张嘴，精度取决于其中的检测方法
 const isOpenMouth = (mouth, base64Img) => {
   const mouth_Y_list = mouth.map((item) => {
@@ -110,9 +135,12 @@ const isOpenMouth = (mouth, base64Img) => {
     // 这里判断 是否失败
     // 由于 每次是400ms  所以5s 之后如果没成功就是失败
     ++count.value
+    console.log("cccc", count);
+    
     if (count.value > 12.5) {
-      error.value = true
-      clearTimeout(jiance.value)
+      if (!isClick.value) {
+        error.value = true
+      }
     }
   }
   state.mouth_Y = _y
@@ -132,6 +160,7 @@ const face_test = async (base64Img) => {
     // const leftEyeBbrow = landmarks.getLeftEyeBrow()
     // const rightEyeBrow = landmarks.getRightEyeBrow()
     //将特征值给这个方法检测是否张嘴了
+
     isOpenMouth(mouth, base64Img)
     const resizedDetections = faceapi.resizeResults(detections1, {
       width: 280,
@@ -163,40 +192,26 @@ const initHuoti = async (rect) => {
       canvas.value.height
     )
     let base64Img = canvas.value.toDataURL('image/jpeg')
+
     face_test(base64Img)
   }, 400)
 }
+
 const initTracker = async () => {
   const _this = this
   // 固定写法
-  let tracker = new window.tracking.ObjectTracker('face')
+  tracker = new window.tracking.ObjectTracker('face')
   tracker.setInitialScale(4)
   tracker.setStepSize(2)
   tracker.setEdgesDensity(0.1)
   //摄像头初始化
-  trackerTask.value = window.tracking.track(video.value, tracker, {
-    camera: true
-  })
-  tracker.on('track', async (event) => {
-    if (event.data.length == 0) {
-      if (!faceflag.value) {
-        tip.value = '未检测到人脸'
-      }
-    } else if (event.data.length > 0) {
-      event.data.forEach(async (rect, index) => {
-        if (index != 0) {
-          return
-        }
-        // 防抖
-        if (!faceflag.value) {
-          faceflag.value = true
-          tip.value = '请张张嘴'
-          //进入人脸动作检测方法
-          initHuoti(rect)
-        }
-      })
-    }
-  })
+  setTimeout(() => {
+    trackerTask.value = window.tracking.track(video.value, tracker, {
+      camera: true
+    })
+  }, 100)
+
+  tracker.on('track', trackFunc)
 }
 const init = async () => {
   vedioOpen.value = false
@@ -210,11 +225,10 @@ const beginVerify = () => {
 const closeMask = () => {
   // 关闭 弹窗
   error.value = false
-  clearTimeout(jiance.value)
+  isClick.value = true
   setTimeout(() => {
-    init()
-  }, 100)
-
+    isClick.value = false
+  }, 5000)
   // 关闭之后 需要重新定时判断
 }
 //在使用页面关闭摄像头的方法
@@ -223,6 +237,7 @@ const stopMediaStreamTrack = function () {
     window.stream.getTracks().forEach((track) => track.stop())
   }
   clearTimeout(jiance.value)
+  tracker.removeListener('track', trackFunc)
 }
 onBeforeUnmount(() => {
   stopMediaStreamTrack()
